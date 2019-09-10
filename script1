@@ -1,0 +1,66 @@
+node{
+    stage ('Git checkout'){
+        git credentialsId: 'c8d8c477-8b65-4f04-8428-9b63e9574b98', url: 'https://gitlab.techverito.com/internal/devops-java-test.git'
+    }
+    
+    stage ('App Compile'){
+        withMaven(maven:'mymaven'){
+            sh 'mvn compile'
+        }
+    }
+    
+    stage ('App Rewiew'){
+       try{
+           withMaven(maven:'mymaven'){
+             sh 'mvn pmd:pmd'
+       }
+       }
+       finally {
+       pmd canComputeNew: false, defaultEncoding: '', healthy: '', pattern: 'target/pmd.xml', unHealthy: ''
+    }
+	}
+    
+    stage ('App test'){
+        try{
+	    withMaven(maven:'mymaven'){
+            sh 'mvn test'
+	    } 
+        }
+        finally{
+            junit 'target/surefire-reports/*.xml'
+        }
+        
+    }
+	stage ('App metrics_Check'){
+        try{
+	    withMaven(maven:'mymaven'){
+            sh 'mvn cobertura:cobertura -Dcobertura.report.format=xml'
+	    } 
+        }
+        finally{
+            cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: 'target/site/cobertura/coverage.xml', conditionalCoverageTargets: '70, 0, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '80, 0, 0', maxNumberOfBuilds: 0, methodCoverageTargets: '80, 0, 0', onlyStable: false, sourceEncoding: 'ASCII', zoomCoverageChart: false
+        }
+        
+    }
+   stage ('App Package'){
+        withMaven(maven:'mymaven'){
+            sh 'mvn package'
+        }
+    } 
+stage('Upload Archive to Artifactory ')
+ {
+  
+     def server = Artifactory.server('jenkins-artifactory-plugin')      
+		
+def uploadSpec = """{
+        "files": [
+    {
+      "pattern": "**/*.jar",
+      "target": "TV_Jfrog_snapshot/$JOB_NAME/Build-$BUILD_NUMBER/"
+    }
+                  ]
+                         }"""
+    server.upload(uploadSpec)
+
+    }
+}
